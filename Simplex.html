@@ -7,65 +7,75 @@
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
 </head>
 <body>
-<h1>Soccer Team Simplex Optimisation</h1>
+    <h1>Soccer Team Simplex Optimisation</h1>
 
-<div>
-    <label>Attacker Cost (€): </label>
-    <input type="number" id="attCost" value="141636.36"><br><br>
+    <div>
+        <label>Attacker Cost (€): </label>
+        <input type="number" id="attCost" value="141636.36"><br><br>
 
-    <label>Defender Cost (€): </label>
-    <input type="number" id="defCost" value="124157.89"><br><br>
+        <label>Defender Cost (€): </label>
+        <input type="number" id="defCost" value="124157.89"><br><br>
 
-    <label>Attack Performance Threshold (AP): </label>
-    <input type="number" id="ap" value="2.5"><br><br>
+        <label>Attack Performance Threshold (AP): </label>
+        <input type="number" id="ap" value="2.5"><br><br>
 
-    <label>Defence Performance Threshold (DP): </label>
-    <input type="number" id="dp" value="4.52"><br><br>
+        <label>Defence Performance Threshold (DP): </label>
+        <input type="number" id="dp" value="4.52"><br><br>
 
-    <button id="run">Run Optimisation</button>
-</div>
+        <button py-click="run_simplex()">Run Optimisation</button>
+    </div>
 
-<h2>Results</h2>
-<div id="result"></div>
+    <h2>Results</h2>
+    <div id="result"></div>
 
-<py-script>
+    <py-script>
 import numpy as np
 import pandas as pd
 from js import document
 
 def run_simplex(evt=None):
+    # Get user inputs
     attackerCost = float(document.getElementById("attCost").value)
     defenderCost = float(document.getElementById("defCost").value)
     AP = float(document.getElementById("ap").value)
     DP = float(document.getElementById("dp").value)
 
+    # Performance coefficients
     alphaA, alphaD = 0.4273, 0.0355
     betaA, betaD = 0.2464, 0.9223
 
-    # Solve simple 2x2 system
+    # Solve simple 2x2 linear system (naive simplex)
     try:
-        solution = np.linalg.solve(np.array([[alphaA, alphaD],[betaA, betaD]]), np.array([AP, DP]))
-        solution = np.clip(solution, 0, None)
+        solution = np.linalg.solve(np.array([[alphaA, alphaD], [betaA, betaD]]), np.array([AP, DP]))
+        solution = np.clip(solution, 0, None)  # enforce non-negative
     except np.linalg.LinAlgError:
         solution = np.array([0,0])
 
-    # enforce team size <= 10
+    # Enforce total team size <= 10
     if solution.sum() > 10:
         solution = solution * 10 / solution.sum()
 
+    # Calculate costs
     contributions = solution * np.array([attackerCost, defenderCost])
     total_cost = contributions.sum()
 
+    # Build result DataFrame
     df = pd.DataFrame({
         "Type": ["Attacker", "Defender"],
         "Ratio": np.round(solution, 2),
         "Costs (€)": [f"€{v:,.2f}" for v in contributions]
     })
 
-    df = pd.concat([df, pd.DataFrame({"Type":["Total Cost"], "Ratio":["-"], "Costs (€)":[f"€{total_cost:,.2f}"]})], ignore_index=True)
-    document.getElementById("result").innerHTML = df.to_html(index=False)
+    # Add total cost row
+    total_row = pd.DataFrame({
+        "Type": ["Total Cost"],
+        "Ratio": ["-"],
+        "Costs (€)":[f"€{total_cost:,.2f}"]
+    })
+    df = pd.concat([df, total_row], ignore_index=True)
 
-document.getElementById("run").addEventListener("click", run_simplex)
-</py-script>
+    # Render in HTML
+    document.getElementById("result").innerHTML = df.to_html(index=False)
+    </py-script>
 </body>
 </html>
