@@ -98,13 +98,15 @@ function runSimplex() {
 
     let total_cost = solution[0]*attackerCost + solution[1]*defenderCost;
 
-    let html = `<table><tr><th>Type</th><th>Ratio</th><th>Costs (€)</th></tr>
+    let html = `<table>
+        <tr><th>Type</th><th>Ratio</th><th>Costs (€)</th></tr>
         <tr><td>Attacker</td><td>${solution[0].toFixed(2)}</td><td>€${(solution[0]*attackerCost).toLocaleString()}</td></tr>
         <tr><td>Defender</td><td>${solution[1].toFixed(2)}</td><td>€${(solution[1]*defenderCost).toLocaleString()}</td></tr>
-        <tr><td>Slack1</td><td>${solution[2].toFixed(2)}</td><td>€${(solution[2]*1e8).toLocaleString()}</td></tr>
-        <tr><td>Slack2</td><td>${solution[3].toFixed(2)}</td><td>€${(solution[3]*1e8).toLocaleString()}</td></tr>
-        <tr><td>Slack3</td><td>${solution[4].toFixed(2)}</td><td>€${(solution[4]*0).toLocaleString()}</td></tr>
-        <tr><td><strong>Total Cost</strong></td><td>-</td><td>€${total_cost.toLocaleString()}</td></tr></table>`;
+        <tr><td>Slack1</td><td>${solution[2].toFixed(2)}</td><td>€0</td></tr>
+        <tr><td>Slack2</td><td>${solution[3].toFixed(2)}</td><td>€0</td></tr>
+        <tr><td>Slack3</td><td>${solution[4].toFixed(2)}</td><td>€0</td></tr>
+        <tr><td><strong>Total Cost</strong></td><td>-</td><td>€${total_cost.toLocaleString()}</td></tr>
+        </table>`;
 
     document.getElementById("result").innerHTML = html;
 }
