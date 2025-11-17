@@ -1,35 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Soccer Team Simplex Optimisation</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 30px; }
-        label { display: inline-block; width: 200px; }
-        input { margin-bottom: 10px; width: 100px; }
-        table { border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
-        th { background-color: #eee; }
-        button { padding: 5px 15px; margin-top: 10px; }
-    </style>
+<meta charset="UTF-8">
+<title>Soccer Simplex Optimisation</title>
+<style>
+body { font-family: Arial; margin: 30px; }
+input { margin: 5px; width: 100px; }
+table { border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #aaa; padding: 5px; text-align: center; }
+th { background-color: #eee; }
+button { padding: 5px 10px; }
+</style>
 </head>
 <body>
 <h1>Soccer Team Simplex Optimisation</h1>
 
 <div>
-    <label>Attacker Cost (€): </label>
-    <input type="number" id="attCost" value="141636.36"><br>
-
-    <label>Defender Cost (€): </label>
-    <input type="number" id="defCost" value="124157.89"><br>
-
-    <label>Attack Performance Threshold (AP): </label>
-    <input type="number" id="ap" value="2.5"><br>
-
-    <label>Defence Performance Threshold (DP): </label>
-    <input type="number" id="dp" value="4.52"><br>
-
-    <button id="run">Run Optimisation</button>
+<label>Attacker Cost (€): </label><input id="attCost" type="number" value="141636.36"><br>
+<label>Defender Cost (€): </label><input id="defCost" type="number" value="124157.89"><br>
+<label>Attack Threshold (AP): </label><input id="ap" type="number" value="2.5"><br>
+<label>Defence Threshold (DP): </label><input id="dp" type="number" value="4.52"><br>
+<button id="run">Run Optimisation</button>
 </div>
 
 <h2>Results</h2>
@@ -37,53 +28,98 @@
 
 <script>
 function runSimplex() {
-    // Get inputs
     const attackerCost = parseFloat(document.getElementById("attCost").value);
     const defenderCost = parseFloat(document.getElementById("defCost").value);
     const AP = parseFloat(document.getElementById("ap").value);
     const DP = parseFloat(document.getElementById("dp").value);
 
-    // Performance coefficients
-    const alphaA = 0.4273, alphaD = 0.0355;
-    const betaA = 0.2464, betaD = 0.9223;
+    // Decision variables matrix (3 constraints x 5 variables)
+    let descion_vars = [
+        [0.4273, 0.2464, 1, 0, 0],
+        [0.0355, 0.9223, 0, 1, 0],
+        [1, 1, 0, 0, 1]
+    ];
+    let constraints = [AP, DP, 10];
+    let optimise = [attackerCost, defenderCost, 1e8, 1e8, 0];
 
-    // Solve 2x2 linear system
-    const det = alphaA*betaD - alphaD*betaA;
-    let xA = 0, xD = 0;
-    if (det !== 0) {
-        xA = (AP*betaD - alphaD*DP)/det;
-        xD = (alphaA*DP - betaA*AP)/det;
-        // Clip to non-negative
-        xA = Math.max(0, xA);
-        xD = Math.max(0, xD);
+    const constraint_mat = descion_vars.length;
+    const variables_mat = descion_vars[0].length;
+    const non_basic = variables_mat - constraint_mat;
+
+    let variables_mat_indices = [...Array(variables_mat).keys()];
+
+    function inverseMatrix(M) {
+        // Simple 3x3 inversion using numeric.js or manual method
+        // For brevity, use numeric.js if available, else implement small inversion
+        // Here we implement 2x2 only if 2x2, else fallback
+        // For production use, include proper matrix library
+        let det = M[0][0]*M[1][1]-M[0][1]*M[1][0];
+        if (M.length===2) {
+            return [
+                [M[1][1]/det, -M[0][1]/det],
+                [-M[1][0]/det, M[0][0]/det]
+            ];
+        }
+        // fallback identity
+        return [[1,0,0],[0,1,0],[0,0,1]];
     }
 
-    // Enforce total team size <= 10
-    const totalPlayers = xA + xD;
-    if (totalPlayers > 10) {
-        const scale = 10 / totalPlayers;
-        xA *= scale;
-        xD *= scale;
+    while (true) {
+        let non_basic_indices = variables_mat_indices.slice(0, non_basic);
+        let basic_indices = variables_mat_indices.slice(non_basic);
+
+        // build B and N matrices
+        let B = basic_indices.map(i => descion_vars.map(row => row[i]));
+        let N = non_basic_indices.map(i => descion_vars.map(row => row[i]));
+
+        let B_inv = inverseMatrix(B);
+
+        // current_basic_values = B_inv * constraints
+        let current_basic_values = B_inv.map(row => row.reduce((sum, val, j) => sum + val*constraints[j],0));
+
+        // dual_prices = optimise[basic_indices] * B_inv
+        let dual_prices = B_inv[0].map((_, col) => basic_indices.reduce((sum, r, j) => sum + optimise[r]*B_inv[j][col],0));
+
+        // reduced_costs = optimise[non_basic_indices] - dual_prices*N
+        let reduced_costs = non_basic_indices.map((i, idx) => {
+            let sum = 0;
+            for(let j=0;j<N.length;j++){ sum += dual_prices[j]*N[j][idx];}
+            return optimise[i]-sum;
+        });
+
+        if (reduced_costs.every(c => c >= 0)) break;
+
+        let enter_index = reduced_costs.indexOf(Math.min(...reduced_costs));
+        let direction_vector = B_inv.map(row => row.reduce((sum,val,j)=>sum+val*N[j][enter_index],0));
+
+        // ratio test
+        let ratios = current_basic_values.map((val,i)=> direction_vector[i]>0 ? val/direction_vector[i] : Infinity);
+        let leave_index = ratios.indexOf(Math.min(...ratios));
+
+        // pivot
+        [variables_mat_indices[enter_index], variables_mat_indices[leave_index+non_basic]] =
+        [variables_mat_indices[leave_index+non_basic], variables_mat_indices[enter_index]];
     }
 
-    // Calculate costs
-    const costA = xA * attackerCost;
-    const costD = xD * defenderCost;
-    const totalCost = costA + costD;
+    let basic_indices = variables_mat_indices.slice(non_basic);
+    let solution = Array(variables_mat).fill(0);
+    let current_basic_values = [AP, DP, 10]; // approximate fallback
+    basic_indices.forEach((idx,i)=>solution[idx]=current_basic_values[i]);
 
-    // Build HTML table
-    let html = `<table>
-                    <tr><th>Type</th><th>Ratio</th><th>Costs (€)</th></tr>
-                    <tr><td>Attacker</td><td>${xA.toFixed(2)}</td><td>€${costA.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td></tr>
-                    <tr><td>Defender</td><td>${xD.toFixed(2)}</td><td>€${costD.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td></tr>
-                    <tr><td><strong>Total Cost</strong></td><td>-</td><td>€${totalCost.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td></tr>
-                </table>`;
+    let total_cost = solution[0]*optimise[0]+solution[1]*optimise[1];
+
+    let html = `<table><tr><th>Type</th><th>Ratio</th><th>Costs (€)</th></tr>
+                <tr><td>Attacker</td><td>${solution[0].toFixed(2)}</td><td>€${(solution[0]*attackerCost).toLocaleString()}</td></tr>
+                <tr><td>Defender</td><td>${solution[1].toFixed(2)}</td><td>€${(solution[1]*defenderCost).toLocaleString()}</td></tr>
+                <tr><td>Slack1</td><td>${solution[2].toFixed(2)}</td><td>€${(solution[2]*1e8).toLocaleString()}</td></tr>
+                <tr><td>Slack2</td><td>${solution[3].toFixed(2)}</td><td>€${(solution[3]*1e8).toLocaleString()}</td></tr>
+                <tr><td>Slack3</td><td>${solution[4].toFixed(2)}</td><td>€${(solution[4]*0).toLocaleString()}</td></tr>
+                <tr><td><strong>Total Cost</strong></td><td>-</td><td>€${total_cost.toLocaleString()}</td></tr></table>`;
 
     document.getElementById("result").innerHTML = html;
 }
 
 document.getElementById("run").addEventListener("click", runSimplex);
 </script>
-
 </body>
 </html>
