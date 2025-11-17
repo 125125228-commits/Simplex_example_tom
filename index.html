@@ -2,25 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Soccer Simplex Optimisation</title>
-    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css">
-    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+    <title>Soccer Team Simplex Optimisation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        label { display: inline-block; width: 200px; }
+        input { margin-bottom: 10px; width: 100px; }
+        table { border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
+        th { background-color: #eee; }
+        button { padding: 5px 15px; margin-top: 10px; }
+    </style>
 </head>
 <body>
 <h1>Soccer Team Simplex Optimisation</h1>
 
 <div>
     <label>Attacker Cost (€): </label>
-    <input type="number" id="attCost" value="141636.36" step="1"><br><br>
+    <input type="number" id="attCost" value="141636.36"><br>
 
     <label>Defender Cost (€): </label>
-    <input type="number" id="defCost" value="124157.89" step="1"><br><br>
+    <input type="number" id="defCost" value="124157.89"><br>
 
     <label>Attack Performance Threshold (AP): </label>
-    <input type="number" id="ap" value="2.5" step="0.01"><br><br>
+    <input type="number" id="ap" value="2.5"><br>
 
     <label>Defence Performance Threshold (DP): </label>
-    <input type="number" id="dp" value="4.52" step="0.01"><br><br>
+    <input type="number" id="dp" value="4.52"><br>
 
     <button id="run">Run Optimisation</button>
 </div>
@@ -28,66 +35,55 @@
 <h2>Results</h2>
 <div id="result"></div>
 
-<py-script>
-import numpy as np
-import pandas as pd
-from js import document, window
+<script>
+function runSimplex() {
+    // Get inputs
+    const attackerCost = parseFloat(document.getElementById("attCost").value);
+    const defenderCost = parseFloat(document.getElementById("defCost").value);
+    const AP = parseFloat(document.getElementById("ap").value);
+    const DP = parseFloat(document.getElementById("dp").value);
 
-def run_simplex(evt=None):
-    try:
-        # Get user inputs
-        attackerCost = float(document.getElementById("attCost").value)
-        defenderCost = float(document.getElementById("defCost").value)
-        AP = float(document.getElementById("ap").value)
-        DP = float(document.getElementById("dp").value)
+    // Performance coefficients
+    const alphaA = 0.4273, alphaD = 0.0355;
+    const betaA = 0.2464, betaD = 0.9223;
 
-        # Performance coefficients
-        alphaA, alphaD = 0.4273, 0.0355
-        betaA, betaD = 0.2464, 0.9223
+    // Solve 2x2 linear system
+    const det = alphaA*betaD - alphaD*betaA;
+    let xA = 0, xD = 0;
+    if (det !== 0) {
+        xA = (AP*betaD - alphaD*DP)/det;
+        xD = (alphaA*DP - betaA*AP)/det;
+        // Clip to non-negative
+        xA = Math.max(0, xA);
+        xD = Math.max(0, xD);
+    }
 
-        # Solve simple 2x2 linear system (naive simplex)
-        A = np.array([[alphaA, alphaD],
-                      [betaA, betaD]])
-        b = np.array([AP, DP])
-        try:
-            solution = np.linalg.solve(A, b)
-            solution = np.clip(solution, 0, None)  # enforce non-negative
-        except np.linalg.LinAlgError:
-            solution = np.array([0, 0])
+    // Enforce total team size <= 10
+    const totalPlayers = xA + xD;
+    if (totalPlayers > 10) {
+        const scale = 10 / totalPlayers;
+        xA *= scale;
+        xD *= scale;
+    }
 
-        # Enforce total team size <= 10
-        if solution.sum() > 10:
-            solution = solution * 10 / solution.sum()
+    // Calculate costs
+    const costA = xA * attackerCost;
+    const costD = xD * defenderCost;
+    const totalCost = costA + costD;
 
-        # Calculate costs
-        contributions = solution * np.array([attackerCost, defenderCost])
-        total_cost = contributions.sum()
+    // Build HTML table
+    let html = `<table>
+                    <tr><th>Type</th><th>Ratio</th><th>Costs (€)</th></tr>
+                    <tr><td>Attacker</td><td>${xA.toFixed(2)}</td><td>€${costA.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td></tr>
+                    <tr><td>Defender</td><td>${xD.toFixed(2)}</td><td>€${costD.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td></tr>
+                    <tr><td><strong>Total Cost</strong></td><td>-</td><td>€${totalCost.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td></tr>
+                </table>`;
 
-        # Build DataFrame
-        df = pd.DataFrame({
-            "Type": ["Attacker", "Defender"],
-            "Ratio": np.round(solution, 2),
-            "Costs (€)": [f"€{v:,.2f}" for v in contributions]
-        })
+    document.getElementById("result").innerHTML = html;
+}
 
-        # Add total row
-        total_row = pd.DataFrame({
-            "Type": ["Total Cost"],
-            "Ratio": ["-"],
-            "Costs (€)": [f"€{total_cost:,.2f}"]
-        })
-        df = pd.concat([df, total_row], ignore_index=True)
+document.getElementById("run").addEventListener("click", runSimplex);
+</script>
 
-        # Render in HTML
-        document.getElementById("result").innerHTML = df.to_html(index=False)
-    except Exception as e:
-        document.getElementById("result").innerHTML = f"<b>Error:</b> {e}"
-
-# Ensure DOM is fully loaded before adding event listener
-def setup(evt=None):
-    document.getElementById("run").addEventListener("click", run_simplex)
-
-window.addEventListener("DOMContentLoaded", setup)
-</py-script>
 </body>
 </html>
