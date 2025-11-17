@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Simplex Optimisation – Browser Version</title>
+
+    <!-- Load PyScript -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
+    <script defer src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            margin-top: 20px;
+            width: 500px;
+        }
+        th, td {
+            border: 1px solid #999;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+
+<body>
+<h2>Simplex Optimisation Model</h2>
+
+<p>This page runs your simplex algorithm directly in the browser using PyScript.</p>
+
+<py-config>
+    packages = ["numpy", "pandas"]
+</py-config>
+
+<py-script>
+import numpy as np
+import pandas as pd
+
+# --- Your matrices ---
+decision_vars = np.array([
+    [0.4273, 0.2464, 1, 0, 0],
+    [0.0355, 0.9223, 0, 1, 0],
+    [1, 1, 0, 0, 1]
+])
+
+constraints = np.array([2.5, 4.5, 10])
+optimise = np.array([141636.3636, 124157.8947, 1e8, 1e8, 0])
+
+# Simplex algorithm
+constraint_mat = decision_vars.shape[0]
+variables_mat = decision_vars.shape[1]
+non_basic = variables_mat - constraint_mat
+
+variables_mat_indices = list(range(variables_mat))
+
+while True:
+    non_basic_indices = variables_mat_indices[:non_basic]
+    basic_indices = variables_mat_indices[non_basic:]
+
+    B = decision_vars[:, basic_indices]
+    B_inv = np.linalg.inv(B)
+    N = decision_vars[:, non_basic_indices]
+
+    current_basic_values = B_inv @ constraints
+    dual_prices = optimise[basic_indices] @ B_inv
+    reduced_costs = optimise[non_basic_indices] - dual_prices @ N
+
+    if all(reduced_costs >= 0):
+        break
+
+    enter_index = np.argmin(reduced_costs)
+    direction_vector = B_inv @ N[:, enter_index]
+
+    ratios = [val / d if d > 0 else np.inf
+              for val, d in zip(current_basic_values, direction_vector)]
+
+    leave_index = np.argmin(ratios)
+
+    variables_mat_indices[enter_index], variables_mat_indices[leave_index + non_basic] = \
+        variables_mat_indices[leave_index + non_basic], variables_mat_indices[enter_index]
+
+# Output
+basic_indices = variables_mat_indices[non_basic:]
+solution = np.zeros(variables_mat)
+solution[basic_indices] = current_basic_values
+
+variable_names = ["Attacker", "Defender", "Slack1", "Slack2", "Slack3"]
+contribution = solution * optimise
+
+df = pd.DataFrame({
+    "Type": variable_names,
+    "Ratio": np.round(solution, 4),
+    "Costs (€)": [f"€{v:,.2f}" for v in contribution]
+})
+
+total_cost = contribution[0] + contribution[1] + contribution[-1]
+
+df.loc[len(df)] = ["Total cost", "-", f"€{total_cost:,.2f}"]
+
+# Render table into HTML page
+from pyscript import display
+display(df, target="output")
+
+</py-script>
+
+<div id="output"></div>
+
+</body>
+</html>
